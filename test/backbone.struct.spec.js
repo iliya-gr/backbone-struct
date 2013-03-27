@@ -164,6 +164,26 @@ describe('Backbone.Struct', function(){
       model.get('collection[1].attr').should.equal(2);
     });
 
+    describe('when `autoInitialize` is true', function(){
+      var _Structured = Structured.extend({
+        autoInitialize: true
+      });
+
+      it('should return non null value for defined child model', function(){
+        var model = new _Structured();
+
+        (model.get('model') != null).should.be.true;
+        (model.get('collection') != null).should.be.true;
+      });
+
+      it('should return null value for non defined child model', function(){
+        var model = new _Structured();
+
+        (model.get('modelA') == null).should.be.true;
+        (model.get('collectionA') == null).should.be.true;
+      });
+    });
+
   }); // #get
 
   describe('#toJSON', function(){
@@ -172,6 +192,52 @@ describe('Backbone.Struct', function(){
       var json  = model.toJSON();
 
       json.should.include({model: {attr: 1}, collection: [{attr: 1}, {attr: 2}, {attr:3}]});
+    });
+
+    describe('when nullifyEmpty is true',function(){
+      var _Structured = Structured.extend({
+        nullifyEmpty: true
+      });
+
+      it('should nullify empty models', function(){
+        var model = new _Structured({model: {}, collection: []});
+        var json = model.toJSON();
+
+        (json.model == null).should.be.true;
+        (json.collection == null).should.be.true;
+      });
+
+      it('should not nullify non empty childs', function(){
+        var model = new _Structured({model: {attr: 1}, collection: []});
+        var json = model.toJSON();
+
+        (json.model != null).should.be.true;
+        (json.collection == null).should.be.true;
+      });
+
+    });
+
+    describe('when clearEmpty is true',function(){
+      var _Structured = Structured.extend({
+        clearEmpty: true
+      });
+
+      it('should clear empty models', function(){
+        var model = new _Structured({model: {}, collection: []});
+        var json = model.toJSON();
+
+        (json.model === undefined).should.be.true;
+        (json.collection === undefined).should.be.true;
+      });
+
+      it('should not clear non empty childs', function(){
+        var model = new _Structured({model: {attr: 1}, collection: []});
+        var json = model.toJSON();
+
+        (json.model !== undefined).should.be.true;
+        (json.collection === undefined).should.be.true;
+      });
+      
     });
 
   }); // #toJSON
