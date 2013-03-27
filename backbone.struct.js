@@ -6,15 +6,29 @@
   if (!Backbone && (typeof require !== 'undefined')) Backbone = require('backbone');
 
   var Struct = Backbone.Struct = Backbone.Model.extend({
+    // Model structure definition.
     struct: {},
 
-    // Initialize attribute.
+    // Whether child models should be auto initialized.
+    // If true getting child will always return child instance.
+    autoInitialize: false,
+
+    // Whether JSON presentation should have null value for empty child models.
+    // If true empty child models will be converted to null in JSON presentation.
+    nullifyEmpty: false,
+
+    // Whether JSON presentation should not have empty child models.
+    // If true empty child references will be removed from JSON presentation.
+    clearEmpty: false,
+
+
+    // Initialize child attribute `attr` with class `klass`.
     __initAttr__: function(attr, klass) {
       var handler;
 
       if (this.attributes[attr]) return this.attributes[attr];
 
-      // Handler for nested model or collection events.
+      // Handler for child items events.
       handler = function() {
         var args, event, target;
 
@@ -27,15 +41,15 @@
         // Update event source.
         args[0] = this;
         
-        // Update event, add dot notation.
+        // Add dot notation to event message.
         args.unshift(_.isString(target) ? event + ':' + attr + '.' + target : event + ':' + attr);
 
-        // Trigger change event on sub models update
+        // Trigger change event on child update
         if ((event === 'change' && !target) || event === 'add' || event === 'remove' || event === 'reset' || event === 'sort' || event === 'destroy') {
           this.trigger.call(this, 'change', this);
         }
 
-        // Trigger event
+        // Trigger modified event
         this.trigger.apply(this, args);
       }
 
@@ -45,11 +59,6 @@
       this.attributes[attr].on('all', handler, this);
 
       return this.attributes[attr];
-    },
-
-    has: function(attr) {
-      var result = this.get(attr);
-      return !(result === null || _.isUndefined(result));
     },
 
     set: function(key, val, options) {
@@ -72,7 +81,7 @@
       for (attr in attrs) {
         var val = attrs[attr];
 
-        // Parsing attr
+        // Parsing attr.
         var path = Struct.attrPath(attr);
 
         // If attr is compound path i.e.: model[1].submodel...
@@ -83,7 +92,7 @@
           ref = this.__initAttr__(path.base, this.struct[path.base]);
 
           // If index present try to get reference to indexed element.
-          // Will throw exception if child doesn't support at function or if item at(index) is null.
+          // Will throw exception if child doesn't respond to `at` or if item `at(index)` is null.
           if (_.isNumber(path.index)) {
             if (!_.isFunction(ref.at))      throw new Error('Unexpected reference index:' + path.index);
             if(!(ref = ref.at(path.index))) throw new Error('Index out of bounds:' + path.index);
@@ -93,10 +102,8 @@
           return path.sub ? ref.set(path.sub, val, options) : ref.set(_.isFunction(val.toJSON) ? val.toJSON() : val, options);
         }
 
-        klass = this.struct[attr];
-
         // If attr is reference to child model.
-        if (_.isString(klass) || _.isFunction(klass)){
+        if ((klass = this.struct[attr])){
           ref = this.__initAttr__(attr, klass);
 
           // If val present and respond to toJSON
@@ -104,8 +111,7 @@
             val = val.toJSON();
           } 
 
-          // If refrenced child is a collection, 
-          // then reset it else set and on null val clear
+          // If referenced child is a collection, then reset it with `val`
           if (ref.reset) {
             ref.reset(val, options);
           } else {
@@ -113,7 +119,6 @@
           }
           
         } else {
-          // Call original set
           Backbone.Model.prototype.set.call(this, attr, val, options);
         }
       }
@@ -137,7 +142,11 @@
         return ref;
       }
 
-      // Call original get
+      // Initialize child if `attr` reference child and `autoInitialize` is true.
+      if(this.struct[attr] && this.autoInitialize) {
+        this.__initAttr__(attr, this.struct[attr]);
+      }
+
       return Backbone.Model.prototype.get.call(this, attr);
     },
 
@@ -147,8 +156,21 @@
       json = Backbone.Model.prototype.toJSON.call(this);
   
       for (attr in this.struct) {
-        json[attr] = ((ref = this.attributes[attr]) != null ? ref.toJSON() : null) || {};
+        ref = (ref = this.get(attr)) != null ? ref.toJSON() : null;
+
+        // Nullify if child JSON presentation is empty and `nullifyEmpty` is true
+        if (this.nullifyEmpty && _.isEmpty(ref)) {
+          ref = null;
+        } 
+
+        // Clear empty if child JSON presentation is empty and `clearEmpty` is true
+        if (this.clearEmpty && _.isEmpty(ref)) {
+          delete json[attr];
+        } else {
+          json[attr] = ref;
+        }
       }
+
       return json;
     }
 
